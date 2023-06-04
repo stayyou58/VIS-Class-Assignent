@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css"
+            integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2"
+            crossorigin="anonymous"/>
+        <!-- google font -->
+        <link href="https://cdn.jsdelivr.net/npm/remixicon@2.5.0/fonts/remixicon.css" rel="stylesheet" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@200&display=swap" rel="stylesheet" />
+       
+        <!-- jquery -->
+        <link rel="stylesheet" href="//apps.bdimg.com/libs/jqueryui/1.10.4/css/jquery-ui.min.css">
+        <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
+        <script src="//apps.bdimg.com/libs/jqueryui/1.10.4/jquery-ui.min.js"></script>
+
+        <!-- d3 -->
+        <script src="https://d3js.org/d3.v6.js"></script>
+
+        <!-- favicon -->
+        <link rel="icon" href="earthquake.png" type="image/x-icon">
+        <link rel="stylesheet" href="index.css" />
+        <script src="script.js"></script>
+        <script src="index.js"></script>
+
+        <title>QuakeLens</title>
+
+<!-- Create an element where the map will take place -->
+
+<body>
+    <nav class="navbar navbar-dark" style="background-color: rgba(245, 245, 245, 0.5);"> 
+        <span class="navbar-brand mb-0" style="color: #2B2E4A;">
+            <img src="earthquake.png" width="30" height="30" class="d-inline-block align-top" alt="" loading="lazy">
+            QuakeLens</span>
+        <button class="navbtn btn btn-sm btn-outline-light" type="button" id="btn">About Us</button>
+    </nav>
+    <div class="alert alert-dark" role="alert">
+        <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+        Hi, welcome to QuakeLens! We are Group 11 and our team members are: 彗瑀 宛婷 俊宇 佳沄 
+    </div>
+
+    <div class="container my-2">
+        <div class="row">
+            <div class="col-lg-9">
+                <div class="col border rounded my-4" style="height: 450px">
+                    <div class="row">   
+                            <!-- <h4 class="m-2">Map</h4> -->
+                                <!-- map code -->
+                                <div id="container">
+                                    <div id="map">
+                                        <svg id="my_dataviz" width="823" height="448"></svg>
+                                        <script>              
+                                            
+                                            // The svg
+                                            const svg = d3.select("svg"),
+                                                width = +svg.attr("width"),
+                                                height = +svg.attr("height");
+                                        
+                                            // Map and projection
+                                            
+                                            const path = d3.geoPath();
+                                            const projection = d3.geoMercator()
+                                                .scale(120)
+                                                .center([0,30])
+                                                .translate([width / 2, height / 2]);
+                                            
+                                            const tooltip = d3
+                                                .select('body')
+                                                .append('div')
+                                                .attr('class', 'tooltip')
+                                                .style('opacity', 0)
+                                        
+                                            // Data and color scale
+                                            let data = new Map()
+                                            const colorScale = d3.scaleThreshold()
+                                                .domain([100000, 1000000, 10000000, 30000000, 100000000, 500000000])
+                                                .range(["#DBD9D8", "#DBD9D8", "#DBD9D8", "#DBD9D8", "#DBD9D8", "#DBD9D8"]);
+                                                // .range(d3.schemeBlues[7]);
+                                                let isZoomed = false;      //用來判斷是否第一次brush，用來修正第一次不能brush，必須先zoom才能brush的bug
+                                                // Add zoom functionality
+                                                const zoom = d3.zoom()
+                                                    .scaleExtent([1, 8]) // set the scale extent to 1 to 8
+                                                    .filter(event => !event.ctrlKey) // disable zoom when Ctrl key is pressed
+                                                    .on("zoom", zoomed); // call the zoomed function when the zoom event occurs
+
+                                            let initial_page = true;    // 判斷是不是初始頁面
+                                            // zoomed func
+                                            function zoomed(event) {
+                                                //在進來之前先remove提示字
+                                                d3.select("#map")
+                                                    .select("text")
+                                                    .remove();
+                                                
+                                                // 判斷地圖有沒有被放大
+                                                if ((event.transform.k !== 1) || (event.transform.x !== 0) || (event.transform.x !== 0)) {
+                                                    isZoomed = true;
+                                                } else {
+                                                    isZoomed = false;
+                                                }
+                                                
+                                                svg.selectAll('path')
+                                                    .attr('transform', event.transform);
+                                                svg.selectAll(".city-circle")
+                                                    .attr("transform", event.transform);
+                                                svg.selectAll(".selection")
+                                                    .attr("transform", event.transform);
+                                                
+                                                // 判斷目前是否有縮放，有的話zoomedIn為true
+                                                zoomedIn =(event.transform.k !== 1) || (event.transform.x !== 0) || (event.transform.x !== 0);
+                                                
+                                                
+                                                //提示使用者可以使用brush
+                                                d3.select("#map")
+                                                    .append("text")
+                                                    .text("Press ctrl to use Brush !")
+                                                    .style("position", "absolute")
+                                                    .style("bottom", "10px")
+                                                    .style("left", "10px")
+                                                    .style("color", "white")
+                                                    .style("font-size", "20px")
+                                                    .transition()
+                                                    .duration(2000)                 // 設置過渡的持續時間為1秒
+                                                    .style("opacity", 0)            // 設置透明度為0，使文字逐漸消失
+                                                    .remove();                      // 移除文字元素
+                                                
+                                                
+                                            }
+
+                                            
+                                            // Load external data and boot
+                                            Promise.all([
+                                            d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson"),
+                                            d3.csv("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world_population.csv", function(d) {
+                                                data.set(d.code, +d.pop)
+                                            }),
+                                            d3.csv("initial_data.csv")
+                                            ]).then(function(loadData){
+                                                let topo = loadData[0]
+                                                let cities = loadData[2]     //初始化dot才開，redraw的話，為了讀入篩選後的資料，這裡要先關掉
+                                                let brushededPoints = [];    //給brushed的點一個空陣列回傳值
+                                                let selectedPoints = [];     //用以回傳brush後所選的點裡面的資料值
+                                                
+                                        
+                                                ///////// Draw the initial map///////
+                                                svg.append("g")
+                                                    .selectAll("path")
+                                                    .data(topo.features)
+                                                    .join("path")
+                                                    // draw each country
+                                                    .attr("d", d3.geoPath()
+                                                        .projection(projection)
+                                                    )
+                                                    // set the color of each country
+                                                    .attr("fill", function (d) {
+                                                        d.total = data.get(d.id) || 0;
+                                                        return colorScale(d.total);
+                                                    });
+                                        
+                            
+                                                
+                                                
+                                                // Add brush functionality
+                                                const brush = d3.brush()
+                                                    .extent([[0, 0], [width, height]])
+                                                    .filter(event => event.ctrlKey) // disable brush when Ctrl key is not pressed
+                                                    .filter(() => !isZoomed)    // 當地圖未被放大時可以使用brush功能
+                                                    .on("start brush", brushed) // call the brushed function when the brush event occurs
+                                                    .on("end", brushEnded);
+                            
+                            
+                                                svg.call(zoom); // apply the zoom behavior to the svg element
+                                                svg.call(brush);
+                                        
+                            
+                                                // Add a scale for bubble size
+                                                const z = d3.scaleLinear()
+                                                            .domain([4, 9.5])
+                                                            .range([ 4, 30]);
+                            
+                                                // Draw the cities as circles
+                                                svg.selectAll(".city-circle")
+                                                    .data(cities)           //初始化dot才開
+                                                    // .data(draw_map)      //redraw讀入的資料改為這個陣列的
+                                                    .enter()
+                                                    .append("circle")
+                                                    .attr("class", "city-circle")
+                                                    .attr("cx", function(d) {
+                                                        return projection([d.longitude, d.latitude])[0];
+                                                    })
+                                                    .attr("cy", function(d) {
+                                                        return projection([d.longitude, d.latitude])[1];
+                                                    })
+                                                    .attr("r", d => z(d.mag))
+                                                    .attr("fill", "rgba(239,35,60,0.5)")
+                                                    .sort((a, b) => d3.descending(a.mag, b.mag))    //讓小泡泡浮在大泡泡上面
+                            
+                                                // Hover circle
+                                                .on("mouseenter", function(){  
+                                                        
+                                                        d3.select(this).attr("fill", "rgba(69,123,157,0.8)");
+                                                        const selectObj = d3.select(this).data();
+                                                        
+                                                        tooltip
+                                                            .transition()
+                                                            .duration(200)
+                                                            .style('opacity', 1)
+                                                        tooltip
+                                                            .html(`
+                                                            
+                                                            <h5>Earthquake NO.：${selectObj[0].id}</h5>
+                                                            <p>
+                                                                Continent_full：${selectObj[0].Continent_full}</br>
+                                                                Continent_simplified：${selectObj[0].Continent_simplified}</br>
+                                                                Country：${selectObj[0].Country}</br>
+                                                                Time：${selectObj[0].time}</br>
+                                                                Latitude：${selectObj[0].latitude}</br>
+                                                                Longitude：${selectObj[0].longitude}</br>
+                                                                Depth：${selectObj[0].depth} Km</br>
+                                                                mag：${selectObj[0].mag}</br>
+                                                                magType：${selectObj[0].magType}</br>
+                                                                nst：${selectObj[0].nst}</br>
+                                                                gap：${selectObj[0].gap}</br>
+                                                                dmin：${selectObj[0].dmin}</br>
+                                                                rms：${selectObj[0].rms}</br>
+                                                                place：${selectObj[0].place}</br>
+                                                                magNst：${selectObj[0].magNst}</br>
+                                                                On_the_sea：${selectObj[0].On_the_sea}</br>
+                                                            </p>
+                                                            
+                                                            `)
+                                                            .style("left", (event.x+50) + "px")
+                                                            .style("top", (event.y-100) + "px")
+                                                            .style("background-color", "rgba(56, 92, 125, 0.9)")
+                                                            .style("border", "solid")
+                                                            .style("border-width", "1px")
+                                                            .style("border-radius", "5px")
+                                                            .style("padding", "10px")
+                                                            .select(".tooltip-text")
+
+                                                        // 增加與長條圖連動的功能
+                                                        var name = d3.select(this).data()[0].id;    // 透過這樣取得ID
+                                                            d3.selectAll("rect").each(function(d,i){
+                                                                if(d.id == name)
+                                                                    d3.select(this).attr("fill","rgba(69,123,157,0.8)");
+                                                             })
+                                                        
+                                                    })
+                                                .on("mouseleave ", function(){
+                                                    d3.select(this).attr("fill", "rgba(239,35,60,0.5)");
+                                                    var name = d3.select(this).data()[0].id;    // 透過這樣取得ID
+                                                            d3.selectAll("rect").each(function(d,i){
+                                                                if(d.id == name)
+                                                                    d3.select(this).attr("fill","rgba(218, 238, 255,0.8)");
+                                                             })
+                                                    // 滑鼠離開後清空tooltip
+                                                    d3.select(".tooltip")
+                                                        .html("")
+                                                        .style('opacity', 0)
+                                                        .style("padding", "0px")
+                                                })
+                            
+                                                var checkbox = document.getElementById("checkbox");
+                                                var barchartDepth = document.getElementById("barchart_depth");
+                                                var barchartMag = document.getElementById("barchart_mag");
+
+                                                checkbox.addEventListener("change", function() {
+                                                if (this.checked) {
+                                                    barchartDepth.style.display = "block";
+                                                    barchartMag.style.display = "none";
+                                                } else {
+                                                    barchartDepth.style.display = "none";
+                                                    barchartMag.style.display = "block";
+                                                }
+                                                });
+
+                                                // Brush Function
+                                                function brushed({selection}) {
+                                                    if (selection) {
+                                                        selectedPoints = [];    // 清空 selectedPoints 陣列，才不會導致一直重複回傳一樣的值
+                                                        const [[x0, y0], [x1, y1]] = selection;
+                                                        const selectedCircles = svg.selectAll(".city-circle")
+                                                            .style("stroke", "")
+                                                            .filter(function(d) {
+                                                                const cx = projection([d.longitude, d.latitude])[0];
+                                                                const cy = projection([d.longitude, d.latitude])[1];
+                                                                return x0 <= cx && cx < x1 && y0 <= cy && cy < y1;
+                                                            })
+                                                            .style("stroke", "#9CA8BB")
+                                                            .nodes();
+                            
+                                                            // 將選取的點回傳到 selectedPoints 陣列
+                                                            selectedCircles.forEach(function(node) {
+                                                                const d = d3.select(node).datum();
+                                                                const selectedPoint = {
+                                                                    id: d.id,
+                                                                    latitude:d.latitude,
+                                                                    longitude:d.longitude,
+                                                                    Continent_full: d.Continent_full,
+                                                                    Continent_simplified: d.Continent_simplified,
+                                                                    Country: d.Country,
+                                                                    Depth: d.depth,
+                                                                    mag: d.mag,
+                                                                    magType: d.magType,
+                                                                    nst: d.nst,
+                                                                    gap: d.gap,
+                                                                    dmin: d.dmin,
+                                                                    rms: d.rms,
+                                                                    place: d.place,
+                                                                    magNst: d.magNst,
+                                                                    On_the_sea: d.On_the_sea
+                                                                };
+                                                                selectedPoints.push(selectedPoint);
+                                                            });
+                                                    } else {
+                                                        svg.selectAll(".city-circle").style("stroke", "steelblue");
+                                                        selectedPoints = [];    // 清空 selectedPoints 陣列
+                                                    }
+                                                    svg.property("value", selectedPoints).dispatch("input");
+                                                    // console.log(selectedPoints);
+                                                }
+                            
+                                                function brushEnded() {
+                                                    isZoomed = false;
+                                                    //這裡是畫深度的
+                                                    //先清空原本的圖
+                                                    d3.select("#barchart_depth").html("");
+                                                    d3.select("#barchart_mag").html("");
+                                                    if (selectedPoints.length!=0){
+                                                        const data = selectedPoints;
+                                                        data.sort(function(a, b) {      // 先排序data
+                                                            return a.longitude - b.longitude;
+                                                        });
+                            
+                                                        const margin = {top: 30, right: 30, bottom: 70, left: 60},
+                                                            width = 660 - margin.left - margin.right +170,
+                                                            height = 300 - margin.top - margin.bottom;
+                            
+                                                        // append the svg object to the body of the page
+                                                        const svg = d3.select("#barchart_depth")
+                                                        .append("svg")
+                                                            .attr("width", width + margin.left + margin.right)
+                                                            .attr("height", height + margin.top + margin.bottom)
+                                                        .append("g")
+                                                            .attr("transform", `translate(${margin.left},${margin.top})`);
+                            
+
+                                                        const x = d3.scaleBand()
+                                                        .range([ 0, width ])
+                                                        .domain(data.map(d => d.id))
+                                                        .padding(0.2);
+                                                        // svg.append("g")
+                                                        // .attr("transform", `translate(0, ${height})`)
+                                                        // .call(d3.axisBottom(x))
+                                                        // .selectAll("text")
+                                                        //     .attr("transform", "translate(-10,0)rotate(-45)")
+                                                        //     .style("text-anchor", "end")
+                                                                                    
+                            
+                                                        //取出最大值，範例給的不知道為什麼不會work，只好繞點遠路
+                                                        var maxDepth = d3.max(data, function(d) {
+                                                            return +d.Depth; 
+                                                        });
+                                                        console.log(maxDepth);
+                                                        // Add Y axis
+                                                        const y = d3.scaleLinear()
+                                                        .domain([0, maxDepth])
+                                                        .range([ height, 0]);
+                                                        svg.append("g")
+                                                        .attr("transform", `translate(0, -2)`)
+                                                        .call(d3.axisLeft(y));
+                            
+                                                        // Bars
+                                                        const barGroups = svg.selectAll("mybar")
+                                                        .data(data)
+                                                        .join("rect")
+                                                            .attr("x", d => x(d.id))
+                                                            .attr("y", d => y(d.Depth))
+                                                            .attr("width", x.bandwidth())
+                                                            .attr("height", d => height -y(d.Depth))
+                                                            .attr("fill", "rgba(218, 238, 255,0.8)")
+                                                            .on("mouseenter", function(){  
+                                                                d3.select(this).attr("fill", "rgba(69,123,157,0.8)");
+                                                                name = d3.select(this).data()[0].id;    // 透過這樣取得ID
+                                                                //console.log(name); 
+                                                                // d3.selectAll("rect").each(function(d,i){
+                                                                //     if(d.id == name)
+                                                                //         d3.select(this).attr("fill","#93E3F5");
+                                                                //  })
+                                                                d3.selectAll(".city-circle").each(function(d,i){
+                                                                    if(d.id == name)
+                                                                        d3.select(this).attr("fill","rgba(69,123,157,0.8)");
+                                                                 })
+
+                                                                 const selectObj = d3.select(this).data();
+                                                        
+                                                                tooltip
+                                                                    .transition()
+                                                                    .duration(200)
+                                                                    .style('opacity', 1)
+                                                                tooltip
+                                                                    .html(`
+                                                                    
+                                                                    <h5>Earthquake NO.：${selectObj[0].id}</h5>
+                                                                    <p>
+                                                                        Continent_full：${selectObj[0].Continent_full}</br>
+                                                                        Continent_simplified：${selectObj[0].Continent_simplified}</br>
+                                                                        Country：${selectObj[0].Country}</br>
+                                                                        Time：${selectObj[0].time}</br>
+                                                                        Latitude：${selectObj[0].latitude}</br>
+                                                                        Longitude：${selectObj[0].longitude}</br>
+                                                                        Depth：${selectObj[0].depth} Km</br>
+                                                                        mag：${selectObj[0].mag}</br>
+                                                                        magType：${selectObj[0].magType}</br>
+                                                                        nst：${selectObj[0].nst}</br>
+                                                                        gap：${selectObj[0].gap}</br>
+                                                                        dmin：${selectObj[0].dmin}</br>
+                                                                        rms：${selectObj[0].rms}</br>
+                                                                        place：${selectObj[0].place}</br>
+                                                                        magNst：${selectObj[0].magNst}</br>
+                                                                        On_the_sea：${selectObj[0].On_the_sea}</br>
+                                                                    </p>
+                                                                    
+                                                                    `)
+                                                                    .style("left", (event.x+50) + "px")
+                                                                    .style("top", (event.y-300) + "px")
+                                                                    .style("background-color", "rgba(56, 92, 125, 0.9)")
+                                                                    .style("border", "solid")
+                                                                    .style("border-width", "1px")
+                                                                    .style("border-radius", "5px")
+                                                                    .style("padding", "10px")
+                                                                    .select(".tooltip-text")
+                            
+                                                            })
+                                                            .on("mouseleave ", function(){
+                                                                d3.select(this).attr("fill", "rgba(218, 238, 255,0.8)");
+                                                                name = d3.select(this).data()[0].id;
+                                                                d3.selectAll(".city-circle").each(function(d,i){
+                                                                    if(d.id == name)
+                                                                        d3.select(this).attr("fill","rgba(239,35,60,0.5)");
+                                                                 })
+
+                                                                // 滑鼠離開後清空tooltip
+                                                                d3.select(".tooltip")
+                                                                    .html("")
+                                                                    .style('opacity', 0)
+                                                                    .style("padding", "0px")
+                                                            })
+
+                                                        
+                                                        //加上XY軸的標籤
+                                                        svg.append("text")
+                                                        .attr("class", "x label")
+                                                        .attr("text-anchor", "end")
+                                                        .attr("x", width)
+                                                        .attr("y", height)
+                                                        // .text("earthquakes sorted by longnitude");
+                            
+                                                        svg.append("text")
+                                                        .attr("class", "y label")
+                                                        .attr("text-anchor", "end")
+                                                        .attr("y", 6)
+                                                        .attr("dy", "-2.75em")
+                                                        .attr("transform", "rotate(-90)")
+                                                        .text("Depth(Km)")
+                                                        .attr("fill", "#fff");
+                            
+
+                                                        //--------------------------------------------
+                                                        //這裡畫震度
+                                                        // append the svg object to the body of the page
+                                                        const svg1 = d3.select("#barchart_mag")
+                                                        .append("svg")
+                                                            .attr("width", width + margin.left + margin.right)
+                                                            .attr("height", height + margin.top + margin.bottom )
+                                                        .append("g")
+                                                            .attr("transform", `translate(${margin.left},${margin.top})`);
+                            
+                            
+                            
+                                                        const x1 = d3.scaleBand()
+                                                        .range([ 0, width ])
+                                                        .domain(data.map(d => d.id))
+                                                        .padding(0.2);
+                                                        // svg1.append("g")
+                                                        // .attr("transform", `translate(0, ${height})`)
+                                                        // .call(d3.axisBottom(x1))
+                                                        // .selectAll("text")
+                                                        //     .attr("transform", "translate(-10,0)rotate(-45)")
+                                                        //     .style("text-anchor", "end");
+                            
+                            
+                                                        //取出最大值，範例給的不知道為什麼不會work，只好繞點遠路
+                                                        var maxmag = d3.max(data, function(d) {
+                                                            return +d.mag; });
+                                                        console.log(maxmag);
+                                                        // Add Y axis
+                                                        const y1 = d3.scaleLinear()
+                                                        .domain([0, maxmag])
+                                                        .range([ height, 0]);
+                                                        svg1.append("g")
+                                                        .attr("transform", `translate(0, -2)`)
+                                                        .call(d3.axisLeft(y1));
+                            
+                                                        // Bars
+                                                        svg1.selectAll("mybar")
+                                                        .data(data)
+                                                        .join("rect")
+                                                            .attr("x", d => x1(d.id))
+                                                            .attr("y", d => y1(d.mag))
+                                                            .attr("width", x.bandwidth())
+                                                            .attr("height", d => height -y1(d.mag))
+                                                            .attr("fill", "rgba(218, 238, 255,0.8)")
+                                                            .on("mouseenter", function(){  
+                                                                d3.select(this).attr("fill", "rgba(69,123,157,0.8)");
+                                                                name = d3.select(this).data()[0].id;    // 透過這樣取得ID
+                                                                d3.selectAll(".city-circle").each(function(d,i){
+                                                                    if(d.id == name)
+                                                                        d3.select(this).attr("fill","rgba(69,123,157,0.8)");
+                                                                 })
+                                                                 const selectObj = d3.select(this).data();
+                                                        
+                                                                    tooltip
+                                                                        .transition()
+                                                                        .duration(200)
+                                                                        .style('opacity', 1)
+                                                                    tooltip
+                                                                        .html(`
+                                                                        
+                                                                        <h5>Earthquake NO.：${selectObj[0].id}</h5>
+                                                                        <p>
+                                                                            Continent_full：${selectObj[0].Continent_full}</br>
+                                                                            Continent_simplified：${selectObj[0].Continent_simplified}</br>
+                                                                            Country：${selectObj[0].Country}</br>
+                                                                            Time：${selectObj[0].time}</br>
+                                                                            Latitude：${selectObj[0].latitude}</br>
+                                                                            Longitude：${selectObj[0].longitude}</br>
+                                                                            Depth：${selectObj[0].depth} Km</br>
+                                                                            mag：${selectObj[0].mag}</br>
+                                                                            magType：${selectObj[0].magType}</br>
+                                                                            nst：${selectObj[0].nst}</br>
+                                                                            gap：${selectObj[0].gap}</br>
+                                                                            dmin：${selectObj[0].dmin}</br>
+                                                                            rms：${selectObj[0].rms}</br>
+                                                                            place：${selectObj[0].place}</br>
+                                                                            magNst：${selectObj[0].magNst}</br>
+                                                                            On_the_sea：${selectObj[0].On_the_sea}</br>
+                                                                        </p>
+                                                                        
+                                                                        `)
+                                                                        .style("left", (event.x+50) + "px")
+                                                                        .style("top", (event.y-300) + "px")
+                                                                        .style("background-color", "rgba(56, 92, 125, 0.9)")
+                                                                        .style("border", "solid")
+                                                                        .style("border-width", "1px")
+                                                                        .style("border-radius", "5px")
+                                                                        .style("padding", "10px")
+                                                                        .select(".tooltip-text")
+
+                            
+                                                            })
+                                                            .on("mouseleave ", function(){
+                                                                d3.select(this).attr("fill", "rgba(218, 238, 255,0.8)");
+                                                                name = d3.select(this).data()[0].id;
+                                                                d3.selectAll(".city-circle").each(function(d,i){
+                                                                    if(d.id == name)
+                                                                        d3.select(this).attr("fill","rgba(239,35,60,0.5)");
+                                                                 })
+                                                                // 滑鼠離開後清空tooltip
+                                                                d3.select(".tooltip")
+                                                                    .html("")
+                                                                    .style('opacity', 0)
+                                                                    .style("padding", "0px")
+                                                            })
+                            
+                                                        // 加上XY軸的標籤
+                                                        svg1.append("text")
+                                                        .attr("class", "x label")
+                                                        .attr("text-anchor", "end")
+                                                        .attr("x", width)
+                                                        .attr("y", height + 64)
+                                                        // .text("earthquakes sorted by longnitude");
+                            
+                                                        svg1.append("text")
+                                                        .attr("class", "y label")
+                                                        .attr("text-anchor", "end")
+                                                        .attr("y", 6)
+                                                        .attr("dy", "-2.75em")
+                                                        .attr("transform", "rotate(-90)")
+                                                        .text("Scale(Meg Type)")
+                                                        .attr("fill", "#fff");
+                            
+                                                        
+                                                    }
+                                                }
+                                                
+                                                svg.on("click", function() {
+                                                    // 判斷目前是否有縮放
+                                                    if (isZoomed) {
+                                                        // 將地圖縮放為原始大小
+                                                        svg.transition()
+                                                        .duration(750)
+                                                        .call(zoom.transform, d3.zoomIdentity);
+                                                        
+                                                        // 更新縮放狀態
+                                                        isZoomed = false;
+                                                }
+                                                });
+                            
+                                            })
+                                        </script>
+                                    </div>
+                                </div>
+                    </div>
+                </div>
+                <div class="col discover border rounded" style="height: 280px">
+                    <div class="row">
+                        <h4 class="d-inline-block m-2">Discover</h4>
+                        <label role="button" for="checkbox" class="switch d-inline-block m-2">
+                            <input type="checkbox" id="checkbox" />
+                            <span class="switch__ball"></span>
+                            <p
+                                class="switch_Frequency mx-2"
+                                style="font-size: 12px; color: #fff">
+                                Scale
+                            </p>
+                            <p class="switch_Depth ml-2" style="font-size: 12px; color: #fff">
+                                Depth
+                            </p>
+                        </label>
+                        <div>
+                            <div id="barchart_depth"></div>
+                            <div id="barchart_mag"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3">
+                <div class="panel col my-4 p-3" style="height: 560px">
+                    <div class="m-1">
+                        <label for="continent">Select Continent</label>
+                        <div class="dropdown d-inline-block">
+                            <select name="continent" id="continent" class="btn btn-light dropdown-toggle">
+                                <option value="Worldwide">Worldwide</option>
+                                <option value="Africa">Africa</option>
+                                <!--<option value="Antarctica">Antarctica</option>-->
+                                <option value="Asia">Asia</option>
+                                <option value="Europe">Europe</option>
+                                <option value="North America">North America</option>
+                                <option value="South America">South America</option>
+                                <option value="Oceania">Oceania</option>
+                                <option value="UNKNOWN">On the Sea</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="m-1">
+                        <label class="mt-1">Depth</label>
+                        <input type="text" class="custom-range" id="depth_amount" min="0" max="720" step="1" style="border:0; font-size: 10px;"/>
+                        <div class="mb-2" id="depth-slider-range"></div>
+                    </div>
+                    <div class="m-1">
+                        <label class="mt-1">Scale</label>
+                        <input type="text" class="custom-range" id="scale_amount" min="1" max="10" step="0.5" style="border:0;font-size: 10px;"/>
+                        <div class="mb-2" id="scale-slider-range"></div>
+                    </div>
+                    <div class="m-1">
+                        <label class="mt-1" for="exampleRadios1">MagType</label>
+                        <div class="" style="font-size: 10px">
+                            <div class="form-check d-inline-block mr-1" id="type">
+                                <label><input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="mb"
+                                    value="mb"
+                                    checked="checked"/>
+                                    mb
+                                </label>
+                            </div>
+                            <div class="form-check d-inline-block">
+                                <label><input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="mww"
+                                    value="mww"
+                                    checked="checked"/>
+                                    mww
+                                </label>
+                            </div>
+                            <div class="form-check d-inline-block">
+                                <label><input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="others"
+                                    value="others"
+                                    checked="checked"/>
+                                    others
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="m-1 time">
+                        <label class="mt-1" for="year-select">Time</label>
+                        <div class="m-1">
+                            <label class="mt-1" for="from" style="font-size: 10px;">From</label>
+                            <input type="text" id="from" name="from" placeholder="Click to select date">
+                            <label class="mt-1" for="to" style="font-size: 10px;">To</label>
+                            <input type="text" id="to" name="to" placeholder="Click to select date">
+                        </div>
+                    </div>
+                    <!-- <div class="m-1">
+                        <label class="mt-1" for="exampleRadios1">Earthquake Type</label>
+                        <div class="" style="font-size: 10px">
+                            <div class="form-check d-inline-block mr-1" id="type">
+                                <label><input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="Earthquake"
+                                    value="earthquake"
+                                    checked="checked"/>
+                                    Earthquake
+                                </label>
+                            </div>
+                            <div class="form-check d-inline-block">
+                                <label><input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="Explosion"
+                                    value="nuclear explosion"
+                                    checked="checked"/>
+                                    Explosion
+                                </label>
+                            </div>
+                        </div>
+                    </div> -->
+                    <!-- <input class="" type="submit" name="search" id="search_button" value="Search"> -->
+                    <div class="m-1 mt-3">
+                    <button class="btn btn-light" type="submit" name="search" id="search_button" value="Search">Search</button>
+                    </div>
+                </div>
+
+                <div class="col panel p-3" style="height: 170px">
+                    <label for="">Filter Conditions</label>
+                    <div class="container">
+                        <div class="detail-item" id="details"></div>
+                    </div>
+                    <div class="rounded selectDetails" style="width: auto; height: 220px;">
+                        <div class="word">
+                            <div id='out_continent_Earthquake_id'></div>
+                            <div id='out_depth_Earthquake_id'></div>
+                            <div id='out_scale_Earthquake_id'></div>
+                            <div id='out_time_Earthquake_id'></div>
+                            <!-- <div id='out_type_Earthquake_id'></div> -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
